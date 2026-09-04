@@ -1,0 +1,7 @@
+{
+  "src": [
+    "pages/MainMenuPage",
+    "pages/GamePage",
+    "pages/ResultPage"
+  ]
+}

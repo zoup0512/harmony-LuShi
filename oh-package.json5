@@ -1,0 +1,9 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "HarmonyOS 酒馆战棋 - 随从自走棋卡牌游戏",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hvigor": "file:../.hvigor-deps/hvigor",
+    "@ohos/hvigor-ohos-plugin": "file:../.hvigor-deps/hvigor-ohos-plugin"
+  }
+}
