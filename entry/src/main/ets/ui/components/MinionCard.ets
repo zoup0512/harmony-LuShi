@@ -1,12 +1,12 @@
 import { Minion, MinionDef } from '../../game/model/Minion';
 import { Keyword, keywordShort, tribeName } from '../../game/model/Types';
-import { MINION_BY_ID } from '../../game/data/MinionLibrary';
+import { MINION_BY_ID, effectiveDefinition } from '../../game/data/MinionLibrary';
 import { Theme } from '../Theme';
 import { ArtAssets, ART_ATTACK, ART_HEALTH, ART_COIN } from '../ArtAssets';
 
 @Component
 export struct MinionCard {
-  minion: Minion = new Minion(MINION_BY_ID.get(1000)!, 0);
+  @Prop minion: Minion = new Minion(MINION_BY_ID.get(1000)!, 0);
   @Prop cardWidth: number = 92;
   @Prop cardHeight: number = 124;
   @Prop selected: boolean = false;
@@ -16,7 +16,7 @@ export struct MinionCard {
   onTap: (m: Minion) => void = () => {};
 
   private def(): MinionDef {
-    return MINION_BY_ID.get(this.minion.defId) || new MinionDef();
+    return effectiveDefinition(this.minion) || new MinionDef();
   }
 
   build() {

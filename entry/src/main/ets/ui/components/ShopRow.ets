@@ -6,7 +6,7 @@
  */
 
 import { Minion } from '../../game/model/Minion';
-import { MINION_BY_ID } from '../../game/data/MinionLibrary';
+import { effectiveDefinition } from '../../game/data/MinionLibrary';
 import { GameConfig } from '../../game/GameConfig';
 import { Theme } from '../Theme';
 import { MinionCard } from './MinionCard';
@@ -14,7 +14,7 @@ import { MinionCard } from './MinionCard';
 @Component
 export struct ShopRow {
   /** 商店随从列表 */
-  @Link minions: Minion[];
+  @Prop minions: Minion[] = [];
   /** 当前金币 */
   @Prop gold: number = 0;
   /** 购买回调（参数：商店索引） */
@@ -54,7 +54,7 @@ export struct ShopRow {
   }
 
   private canAfford(m: Minion): boolean {
-    const def = MINION_BY_ID.get(m.defId);
+    const def = effectiveDefinition(m);
     if (!def) return false;
     return this.gold >= GameConfig.buyCost(def.tier);
   }

@@ -8,24 +8,14 @@
  * 并把变化渲染到屏幕上。事件全部播放完后展示结果。
  */
 
-import { Minion, MinionDef } from '../../game/model/Minion';
-import { Keyword, Side } from '../../game/model/Types';
-import { MINION_BY_ID } from '../../game/data/MinionLibrary';
+import { Side } from '../../game/model/Types';
 import {
   BattleResult, CombatEvent, CombatEventType, BattleOutcome
 } from '../../game/combat/CombatTypes';
 import { Theme } from '../Theme';
 import { MinionCard } from './MinionCard';
-import { nextUid } from '../../game/util/Rng';
+import { BoardSlot, replaySlots, reduceReplay } from '../../game/combat/ReplayReducer';
 import { ART_BACKGROUND_BATTLE } from '../ArtAssets';
-
-interface BoardSlot {
-  minion: Minion | null;
-  /** 本帧是否刚受击（飘字高亮） */
-  flashing: boolean;
-  /** 本帧飘字内容 */
-  floatText: string;
-}
 
 @Component
 export struct BattleReplay {
@@ -58,24 +48,8 @@ export struct BattleReplay {
   }
 
   private initSlots(): void {
-    // 从 START 之后的事件无法直接得到初始阵容，因此用一个临时映射重建。
-    // 我们扫描所有事件，收集出现过的 uid 到阵营；但更可靠的是在引擎里把初始阵容也存进结果。
-    // 这里采用：BattleResult 的事件中第一个 ATTACK 之前不会改变阵容，所以我们用"所有出现过的 uid"作为初始。
-    // 为简化，我们改为在 GameEngine 调用时把初始阵容也放进 result（见 CombatTypes 扩展）。
-    // 此处用 result.playerInit / aiInit（在引擎里赋值）。
-    this.playerSlots = this.toSlots(this.result.playerInit);
-    this.aiSlots = this.toSlots(this.result.aiInit);
-  }
-
-  private toSlots(minions: Minion[]): BoardSlot[] {
-    const result: BoardSlot[] = [];
-    for (const m of minions) {
-      const slot: BoardSlot = {
-        minion: m.clone(m.uid), flashing: false, floatText: ''
-      };
-      result.push(slot);
-    }
-    return result;
+    this.playerSlots = replaySlots(this.result.playerInit);
+    this.aiSlots = replaySlots(this.result.aiInit);
   }
 
   private scheduleNext(): void {
@@ -100,133 +74,11 @@ export struct BattleReplay {
   }
 
   private applyEvent(e: CombatEvent): void {
-    // 清除上一帧的高亮
-    for (const s of this.playerSlots) { s.flashing = false; s.floatText = ''; }
-    for (const s of this.aiSlots) { s.flashing = false; s.floatText = ''; }
-
-    switch (e.type) {
-      case CombatEventType.START:
-        this.statusText = `第 ${this.round} 回合 · 战斗开始`;
-        this.highlightUid = -1;
-        break;
-      case CombatEventType.ATTACK: {
-        this.statusText = '攻击！';
-        this.highlightUid = e.actorUid;
-        break;
-      }
-      case CombatEventType.DAMAGE: {
-        const slots = e.targetSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const slot = this.findSlot(slots, e.targetUid);
-        if (slot && slot.minion) {
-          slot.minion.hp -= e.amount;
-          if (slot.minion.hp < 0) slot.minion.hp = 0;
-          slot.flashing = true;
-          slot.floatText = `-${e.amount}`;
-        }
-        this.statusText = `造成 ${e.amount} 伤害`;
-        break;
-      }
-      case CombatEventType.SHIELD_BLOCK: {
-        const slots = e.actorSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const slot = this.findSlot(slots, e.actorUid);
-        if (slot && slot.minion) {
-          slot.minion.removeKeyword(Keyword.DIVINE_SHIELD);
-          slot.flashing = true;
-          slot.floatText = '圣盾!';
-        }
-        this.statusText = '圣盾抵消';
-        break;
-      }
-      case CombatEventType.DEATH: {
-        const slots = e.actorSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const slot = this.findSlot(slots, e.actorUid);
-        if (slot) {
-          slot.minion = null;
-        }
-        this.statusText = '随从阵亡';
-        break;
-      }
-      case CombatEventType.DEATHRATTLE:
-        this.statusText = '亡语触发';
-        break;
-      case CombatEventType.SUMMON: {
-        // 召唤一个新随从到对应方（用 text 里的名称创建一个占位）
-        const slots = e.actorSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const empty = slots.findIndex((s) => s.minion === null);
-        // 若没有空位则追加（最多 7）
-        const def = this.guessDefFromText(e.text);
-        if (def && slots.length < 7) {
-          const m = new Minion(def, nextUid());
-          if (empty >= 0) {
-            slots[empty].minion = m;
-          } else {
-            const newSlot: BoardSlot = { minion: m, flashing: true, floatText: '召唤' };
-            slots.push(newSlot);
-          }
-        }
-        this.statusText = e.text;
-        break;
-      }
-      case CombatEventType.STAT_CHANGE: {
-        const slots = e.targetSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const slot = this.findSlot(slots, e.targetUid);
-        if (slot && slot.minion) {
-          // 解析 text 中的 +atk/+hp
-          const match = e.text.match(/\+(\d+)\/\+(\d+)/);
-          if (match) {
-            slot.minion.atk += parseInt(match[1]);
-            slot.minion.hp += parseInt(match[2]);
-            slot.minion.maxHp += parseInt(match[2]);
-          }
-          slot.flashing = true;
-          slot.floatText = e.text;
-        }
-        this.statusText = e.text;
-        break;
-      }
-      case CombatEventType.REBORN_TRIGGER: {
-        const slots = e.actorSide === Side.PLAYER ? this.playerSlots : this.aiSlots;
-        const slot = this.findSlot(slots, e.actorUid);
-        if (slot) {
-          const def = slot.minion ? MINION_BY_ID.get(slot.minion.defId) : null;
-          if (def) {
-            const m = new Minion(def, nextUid());
-            m.hp = 1;
-            m.maxHp = 1;
-            m.removeKeyword(Keyword.REBORN);
-            slot.minion = m;
-            slot.flashing = true;
-            slot.floatText = '复生!';
-          }
-        }
-        this.statusText = '复生';
-        break;
-      }
-      case CombatEventType.END:
-        this.finished = true;
-        this.statusText = e.text;
-        break;
-      default:
-        break;
-    }
-  }
-
-  private findSlot(slots: BoardSlot[], uid: number): BoardSlot | null {
-    for (const s of slots) {
-      if (s.minion && s.minion.uid === uid) return s;
-    }
-    return null;
-  }
-
-  /** 从"召唤 招潮者"这样的文本里反推 def */
-  private guessDefFromText(text: string): MinionDef | null {
-    const parts = text.split(' ');
-    if (parts.length < 2) return null;
-    const name = parts.slice(1).join(' ');
-    for (const def of MINION_BY_ID.values()) {
-      if (def.name === name) return def;
-    }
-    return null;
+    this.playerSlots = reduceReplay(this.playerSlots, Side.PLAYER, e);
+    this.aiSlots = reduceReplay(this.aiSlots, Side.AI, e);
+    this.statusText = e.type === CombatEventType.START ? `第 ${this.round} 回合 · 战斗开始` : e.text;
+    this.highlightUid = e.type === CombatEventType.ATTACK ? e.actorUid : -1;
+    if (e.type === CombatEventType.END) this.finished = true;
   }
 
   build() {

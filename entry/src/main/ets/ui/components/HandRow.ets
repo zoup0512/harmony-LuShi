@@ -13,7 +13,7 @@ import { MinionCard } from './MinionCard';
 @Component
 export struct HandRow {
   /** 手牌 */
-  @Link minions: Minion[];
+  @Prop minions: Minion[] = [];
   /** 战场是否已满 */
   @Prop boardFull: boolean = false;
   /** 当前选中手牌 uid */

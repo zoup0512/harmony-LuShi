@@ -17,10 +17,10 @@
 import { Minion } from '../model/Minion';
 import { Keyword, Side } from '../model/Types';
 import { EffectData, EffectType, TargetMode, Trigger } from '../model/Trigger';
-import { MINION_BY_ID, goldenVersion } from '../data/MinionLibrary';
+import { MINION_BY_ID, effectiveDefinition } from '../data/MinionLibrary';
 import { Rng, nextUid } from '../util/Rng';
 import {
-  BattleOutcome, BattleResult, CombatEvent, CombatEventType, ev
+  BattleOutcome, BattleResult, CombatEventType, ev
 } from './CombatTypes';
 
 /** 战斗中一个阵营的运行时状态（独立于 PlayerState，避免污染准备阶段数据） */
@@ -58,11 +58,15 @@ export function simulateBattle(
   const player = new CombatSide(playerBoard, Side.PLAYER);
   const ai = new CombatSide(aiBoard, Side.AI);
 
+  result.playerInit = player.minions.map((m) => m.clone(m.uid));
+  result.aiInit = ai.minions.map((m) => m.clone(m.uid));
+
   // 战斗开始事件
   result.events.push(ev(CombatEventType.START, -1, Side.PLAYER, -1, Side.AI, 0, '战斗开始'));
 
   // 应用光环（如给相邻/同族加属性）——战斗开始时一次性结算
   applyAuras(player, ai, result, rng);
+  cleanupDeaths(player, ai, result, rng);
 
   // 决定先手：随从多的一方先手；相同则随机
   let attackerSide: Side;
@@ -97,7 +101,6 @@ export function simulateBattle(
 
     // 清理死亡随从（处理亡语、复生、移除）
     cleanupDeaths(player, ai, result, rng);
-    cleanupDeaths(ai, player, result, rng);
 
     // 该随从攻击次数 -1；若还有次数（风怒），同一方继续；否则换边
     attacker.attacksLeft--;
@@ -198,10 +201,7 @@ function dealDamage(
   }
 
   target.hp -= amount;
-  result.events.push(ev(
-    CombatEventType.DAMAGE, source.uid, sourceSide.side, target.uid, targetSide.side, amount,
-    `受到 ${amount} 点伤害`
-  ));
+
 
   // 剧毒：来源带剧毒，目标血量 ≤0 后立即标记消灭
   if (source.hasKeyword(Keyword.POISONOUS) && target.hp > 0) {
@@ -214,44 +214,60 @@ function dealDamage(
     target.pendingDestroy = true;
   }
 
+  const event = ev(CombatEventType.DAMAGE, source.uid, sourceSide.side,
+    target.uid, targetSide.side, amount, `受到 ${amount} 点伤害`);
+  event.minionState = target.clone(target.uid);
+  result.events.push(event);
+
   // 受伤触发（狂暴类）——简化为不实现，留扩展点
 }
 
-/**
- * 清理死亡随从：触发亡语、复生，然后从阵列移除。
- * 注意：亡语可能召唤新随从，需在移除前处理。
+/** 非重入死亡批次：先移除双方死者，再触发效果；新死亡由下一批处理。
+ * 保留简化复生规则（原实例原位置恢复 1 血，不先触发亡语）。
  */
 function cleanupDeaths(
   side: CombatSide, opponent: CombatSide, result: BattleResult, rng: Rng
 ): void {
-  const dead = side.minions.filter((m) => m.pendingDestroy && !m.hasKeyword(Keyword.REBORN));
-  const reborn = side.minions.filter((m) => m.pendingDestroy && m.hasKeyword(Keyword.REBORN));
-
-  // 处理复生：血量恢复到 1，移除复生关键词
-  for (const m of reborn) {
-    m.pendingDestroy = false;
-    m.hp = 1;
-    m.removeKeyword(Keyword.REBORN);
-    result.events.push(ev(
-      CombatEventType.REBORN_TRIGGER, m.uid, side.side, -1, side.side, 0, '复生'
-    ));
-  }
-
-  // 处理亡语 + 死亡事件
-  for (const m of dead) {
-    result.events.push(ev(CombatEventType.DEATH, m.uid, side.side, -1, side.side, 0, '阵亡'));
-    triggerDeathrattles(m, side, opponent, result, rng);
-  }
-
-  // 触发友方死亡回调（食腐类）——这里在亡语之后，让 buff 类效果能吃到召唤物
-  if (dead.length > 0) {
-    for (const ally of side.alive()) {
-      resolveTriggers(ally, side, opponent, Trigger.ON_ALLY_DEATH, result, rng, dead);
+  while (true) {
+    const sides: CombatSide[] = [side, opponent];
+    const batches: Minion[][] = [];
+    let found = false;
+    for (const current of sides) {
+      const dying = current.minions.filter((m) => m.pendingDestroy || m.hp <= 0);
+      if (dying.length > 0) found = true;
+      const dead: Minion[] = [];
+      for (const m of dying) {
+        if (m.hasKeyword(Keyword.REBORN)) {
+          m.pendingDestroy = false;
+          m.hp = 1;
+          m.removeKeyword(Keyword.REBORN);
+          const event = ev(CombatEventType.REBORN_TRIGGER, m.uid, current.side,
+            -1, current.side, 0, '复生');
+          event.minionState = m.clone(m.uid);
+          result.events.push(event);
+        } else {
+          dead.push(m);
+          result.events.push(ev(CombatEventType.DEATH, m.uid, current.side,
+            -1, current.side, 0, '阵亡'));
+        }
+      }
+      current.minions = current.minions.filter((m) => dead.indexOf(m) < 0);
+      batches.push(dead);
+    }
+    if (!found) break;
+    for (let i = 0; i < sides.length; i++) {
+      const current = sides[i];
+      const enemy = sides[1 - i];
+      const dead = batches[i];
+      for (const m of dead) triggerDeathrattles(m, current, enemy, result, rng);
+      // 每个死者分别派发一次友方死亡回调，且亡语召唤物也能获得效果。
+      for (const fallen of dead) {
+        for (const ally of current.alive()) {
+          resolveTriggers(ally, current, enemy, Trigger.ON_ALLY_DEATH, result, rng, [fallen]);
+        }
+      }
     }
   }
-
-  // 真正移除死亡随从
-  side.minions = side.minions.filter((m) => !m.pendingDestroy);
 }
 
 /**
@@ -261,7 +277,7 @@ function triggerDeathrattles(
   owner: Minion, side: CombatSide, opponent: CombatSide,
   result: BattleResult, rng: Rng
 ): void {
-  const def = MINION_BY_ID.get(owner.defId);
+  const def = effectiveDefinition(owner);
   if (!def) return;
   for (const trig of def.triggers) {
     if (trig.trigger !== Trigger.ON_DEATH) continue;
@@ -282,7 +298,7 @@ function resolveTriggers(
   trigger: Trigger, result: BattleResult, rng: Rng,
   context: Minion[] = []
 ): void {
-  const def = MINION_BY_ID.get(owner.defId);
+  const def = effectiveDefinition(owner);
   if (!def) return;
   for (const trig of def.triggers) {
     if (trig.trigger !== trigger) continue;
@@ -300,23 +316,22 @@ function resolveEffect(
   eff: EffectData, owner: Minion, side: CombatSide, opponent: CombatSide,
   result: BattleResult, rng: Rng, context: Minion[] = []
 ): void {
-  const friendlyAlive = side.alive();
-  const enemyAlive = opponent.alive();
-
   // 召唤类
   if (eff.type === EffectType.SUMMON) {
-    const count = owner.golden ? eff.value : eff.value; // 金色已在 def 翻倍 value
+    const count = eff.value; // 有效定义已翻倍
     const defId = eff.summonId;
     const def = MINION_BY_ID.get(defId);
     if (!def) return;
     for (let i = 0; i < count; i++) {
-      if (side.minions.length >= 7) break;
+      if (side.alive().length >= 7) break;
       const newMinion = new Minion(def, nextUid());
       side.minions.push(newMinion);
-      result.events.push(ev(
+      const event = ev(
         CombatEventType.SUMMON, owner.uid, side.side, newMinion.uid, side.side, 0,
         `召唤 ${def.name}`
-      ));
+      );
+      event.minionState = newMinion.clone(newMinion.uid);
+      result.events.push(event);
     }
     return;
   }
@@ -327,34 +342,38 @@ function resolveEffect(
   const hpDelta = eff.hpDelta;
 
   for (const t of targets) {
+    const targetSide = opponent.minions.indexOf(t) >= 0 ? opponent : side;
+    if (eff.type === EffectType.DAMAGE) {
+      dealDamage(eff.value, t, targetSide, owner, side, result);
+      continue;
+    }
+    let text = '';
     if (eff.type === EffectType.BUFF_STATS) {
       t.atk += atkDelta;
       t.hp += hpDelta;
       t.maxHp = Math.max(t.maxHp, t.hp);
-      result.events.push(ev(
-        CombatEventType.STAT_CHANGE, owner.uid, side.side, t.uid, side.side,
-        atkDelta, `+${atkDelta}/+${hpDelta}`
-      ));
-      if (t.hp <= 0) {
-        t.pendingDestroy = true;
-      }
-    } else if (eff.type === EffectType.DAMAGE) {
-      dealDamage(eff.value, t, side, owner, side, result);
+      if (t.hp <= 0) t.pendingDestroy = true;
+      text = `${atkDelta >= 0 ? '+' : ''}${atkDelta}/${hpDelta >= 0 ? '+' : ''}${hpDelta}`;
     } else if (eff.type === EffectType.GIVE_DIVINE_SHIELD) {
       t.addKeyword(Keyword.DIVINE_SHIELD);
-      result.events.push(ev(
-        CombatEventType.STAT_CHANGE, owner.uid, side.side, t.uid, side.side, 0, '获得圣盾'
-      ));
+      text = '获得圣盾';
     } else if (eff.type === EffectType.GIVE_TAUNT) {
       t.addKeyword(Keyword.TAUNT);
+      text = '获得嘲讽';
     } else if (eff.type === EffectType.GIVE_WINDFURY) {
       t.addKeyword(Keyword.WINDFURY);
+      text = '获得风怒';
+    } else {
+      continue;
     }
+    const event = ev(CombatEventType.STAT_CHANGE, owner.uid, side.side,
+      t.uid, targetSide.side, atkDelta, text);
+    event.atkDelta = eff.type === EffectType.BUFF_STATS ? atkDelta : 0;
+    event.hpDelta = eff.type === EffectType.BUFF_STATS ? hpDelta : 0;
+    event.minionState = t.clone(t.uid);
+    result.events.push(event);
   }
-
-  // 死亡随从可能在伤害效果后产生，统一清理
-  cleanupDeaths(side, opponent, result, rng);
-  cleanupDeaths(opponent, side, result, rng);
+  // 不在效果内部清理；外层死亡 drain 处理连锁，避免重新触发同一死者。
 }
 
 /**
@@ -365,7 +384,7 @@ function selectTargets(
 ): Minion[] {
   const friendly = side.alive();
   const enemy = opponent.alive();
-  const def = MINION_BY_ID.get(owner.defId);
+  const def = effectiveDefinition(owner);
 
   switch (mode) {
     case TargetMode.SELF:
@@ -388,7 +407,7 @@ function selectTargets(
     case TargetMode.SAME_TRIBE: {
       if (!def) return [];
       return friendly.filter((m) => {
-        const d = MINION_BY_ID.get(m.defId);
+        const d = effectiveDefinition(m);
         return d && d.tribe === def.tribe;
       });
     }

@@ -13,7 +13,7 @@ import { MinionCard } from './MinionCard';
 @Component
 export struct BoardRow {
   /** 战场随从 */
-  @Link minions: Minion[];
+  @Prop minions: Minion[] = [];
   /** 是否为玩家方（可交互） */
   @Prop isPlayer: boolean = true;
   /** 当前选中的随从 uid */

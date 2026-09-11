@@ -7,7 +7,7 @@
  * 金色（三连）版本不在此列出，运行时由引擎把 Def 数值翻倍生成。
  */
 
-import { MinionDef } from '../model/Minion';
+import { Minion, MinionDef } from '../model/Minion';
 import { Keyword, Tribe } from '../model/Types';
 import { Trigger, TriggerDef, EffectData, EffectType, TargetMode } from '../model/Trigger';
 
@@ -70,9 +70,9 @@ function grantKeyword(target: TargetMode, type: EffectType): EffectData {
 
 // ============================== Tier 1 ==============================
 
-/** 鱼人招潮者：每回合开始时使一个随机友方鱼人 +1/+1 */
+/** 鱼人招潮者：每回合开始时使所有友方鱼人 +1/+1 */
 const MURLOC_TIDECALLER: MinionDef = makeDef('招潮者', 1, 2, 1, Tribe.MURLOC);
-MURLOC_TIDECALLER.flavor = '每当有友方鱼人登场，便壮一分。';
+MURLOC_TIDECALLER.flavor = '回合开始：使所有友方鱼人 +1/+1。';
 MURLOC_TIDECALLER.triggers = [trig(Trigger.ON_TURN_START, [buff(TargetMode.SAME_TRIBE, 1, 1)])];
 
 /** 微型机械：1/1 衍生物 */
@@ -294,6 +294,7 @@ for (const m of ALL_MINIONS) {
 
 /** 取一个 Def 的金色（三连）版本：数值翻倍，触发器效果也翻倍。 */
 export function goldenVersion(def: MinionDef): MinionDef {
+  if (def.golden) return def;
   const g = new MinionDef();
   g.id = def.id;
   g.name = def.name;
@@ -323,4 +324,10 @@ export function goldenVersion(def: MinionDef): MinionDef {
   }
   g.triggers = newTriggers;
   return g;
+}
+
+/** 根据实例标记读取有效定义；不修改实例属性或基础卡牌库。 */
+export function effectiveDefinition(minion: Minion): MinionDef | undefined {
+  const def = MINION_BY_ID.get(minion.defId);
+  return def && minion.golden ? goldenVersion(def) : def;
 }

@@ -50,6 +50,10 @@ export interface CombatEvent {
   amount: number;
   /** 文字描述（如亡语效果） */
   text: string;
+  /** 效果结算后的独立状态：召唤含 defId，复生保留 actorUid。 */
+  minionState?: Minion;
+  atkDelta?: number;
+  hpDelta?: number;
 }
 
 /** 战斗结果 */

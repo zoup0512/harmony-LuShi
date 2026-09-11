@@ -6,7 +6,7 @@ function emptyHero(): HeroDef { return new HeroDef(); }
 
 @Component
 export struct HeroPanel {
-  state: PlayerState = new PlayerState(emptyHero());
+  @Prop state: PlayerState = new PlayerState(emptyHero());
   @Prop isOpponent: boolean = false;
   @Prop showGold: boolean = true;
 

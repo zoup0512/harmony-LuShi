@@ -10,10 +10,10 @@
 
 import { PlayerState, HeroDef, HeroSkillTarget } from '../model/Hero';
 import { Minion, MinionDef } from '../model/Minion';
-import { Keyword, Phase, Side, Tribe } from '../model/Types';
+import { Keyword, Phase, Side } from '../model/Types';
 import { EffectData, EffectType, TargetMode, Trigger } from '../model/Trigger';
 import {
-  ALL_MINIONS, MINION_BY_ID, goldenVersion
+  ALL_MINIONS, MINION_BY_ID, goldenVersion, effectiveDefinition
 } from '../data/MinionLibrary';
 import { randomHero } from '../data/HeroLibrary';
 import { GameConfig } from '../GameConfig';
@@ -115,7 +115,7 @@ export class GameEngine {
    */
   private triggerTurnStartForBoard(board: Minion[], side: Side): void {
     for (const m of board) {
-      const def = MINION_BY_ID.get(m.defId);
+      const def = effectiveDefinition(m);
       if (!def) continue;
       for (const trig of def.triggers) {
         if (trig.trigger !== Trigger.ON_TURN_START) continue;
@@ -156,7 +156,7 @@ export class GameEngine {
   }
 
   private selectRecruitTargets(mode: TargetMode, owner: Minion, board: Minion[]): Minion[] {
-    const def = MINION_BY_ID.get(owner.defId);
+    const def = effectiveDefinition(owner);
     switch (mode) {
       case TargetMode.SELF: return [owner];
       case TargetMode.RANDOM_FRIENDLY:
@@ -165,7 +165,7 @@ export class GameEngine {
       case TargetMode.SAME_TRIBE: {
         if (!def) return [];
         return board.filter((m) => {
-          const d = MINION_BY_ID.get(m.defId);
+          const d = effectiveDefinition(m);
           return d && d.tribe === def.tribe;
         });
       }
@@ -215,7 +215,7 @@ export class GameEngine {
     if (shopIndex < 0 || shopIndex >= this.player.shop.length) return false;
     if (this.player.hand.length >= 10) return false;
     const m = this.player.shop[shopIndex];
-    const cost = GameConfig.buyCost(MINION_BY_ID.get(m.defId)!.tier);
+    const cost = GameConfig.buyCost(effectiveDefinition(m)!.tier);
     if (this.player.gold < cost) return false;
     this.player.gold -= cost;
     this.player.shop.splice(shopIndex, 1);
@@ -229,7 +229,7 @@ export class GameEngine {
 
   /** 触发随从的战吼效果 */
   private triggerBattlecry(m: Minion, p: PlayerState): void {
-    const def = MINION_BY_ID.get(m.defId);
+    const def = effectiveDefinition(m);
     if (!def) return;
     for (const trig of def.triggers) {
       if (trig.trigger !== Trigger.BATTLECRY) continue;
@@ -363,9 +363,6 @@ export class GameEngine {
 
     // 模拟战斗
     const result = simulateBattle(this.player.board, this.ai.board, this.rng);
-    // 保存初始阵容供回放展示（克隆，避免战斗内部修改影响）
-    result.playerInit = this.player.board.map((m) => m.clone(nextUid()));
-    result.aiInit = this.ai.board.map((m) => m.clone(nextUid()));
 
     // 结算英雄伤害
     let playerDamage = 0;

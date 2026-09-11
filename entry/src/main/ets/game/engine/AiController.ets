@@ -15,7 +15,7 @@
 import { PlayerState } from '../model/Hero';
 import { Minion, MinionDef } from '../model/Minion';
 import { Keyword } from '../model/Types';
-import { ALL_MINIONS, MINION_BY_ID, goldenVersion } from '../data/MinionLibrary';
+import { ALL_MINIONS, MINION_BY_ID, goldenVersion, effectiveDefinition } from '../data/MinionLibrary';
 import { GameConfig } from '../GameConfig';
 import { Rng, nextUid } from '../util/Rng';
 
@@ -70,7 +70,7 @@ export class AiController {
     let bestScore = -1;
     for (let i = 0; i < this.ai.shop.length; i++) {
       const m = this.ai.shop[i];
-      const def = MINION_BY_ID.get(m.defId);
+      const def = effectiveDefinition(m);
       if (!def) continue;
       const cost = GameConfig.buyCost(def.tier);
       if (this.ai.gold < cost) continue;
@@ -83,7 +83,7 @@ export class AiController {
     if (bestIdx < 0) return false;
 
     const m = this.ai.shop[bestIdx];
-    const def = MINION_BY_ID.get(m.defId)!;
+    const def = effectiveDefinition(m)!;
     const cost = GameConfig.buyCost(def.tier);
     this.ai.gold -= cost;
     this.ai.shop.splice(bestIdx, 1);
@@ -106,7 +106,7 @@ export class AiController {
     if (def.triggers.length > 0) score += 3; // 有触发能力
     // 同族协同：场上已有该种族则加分
     const sameTribeOnBoard = this.ai.board.filter((b) => {
-      const d = MINION_BY_ID.get(b.defId);
+      const d = effectiveDefinition(b);
       return d && d.tribe === def.tribe;
     }).length;
     score += sameTribeOnBoard * 2;
@@ -125,7 +125,7 @@ export class AiController {
       let worstIdx = 0;
       let worstScore = Number.MAX_VALUE;
       for (let i = 0; i < this.ai.board.length; i++) {
-        const def = MINION_BY_ID.get(this.ai.board[i].defId);
+        const def = effectiveDefinition(this.ai.board[i]);
         const s = def ? this.scoreMinion(def) : 0;
         if (s < worstScore) {
           worstScore = s;

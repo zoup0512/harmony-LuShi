@@ -27,15 +27,17 @@ import { GameConfig } from '../game/GameConfig';
 import { BattleResult } from '../game/combat/CombatTypes';
 import { ALL_HEROES } from '../game/data/HeroLibrary';
 import { PlayerState } from '../game/model/Hero';
-import { MINION_BY_ID } from '../game/data/MinionLibrary';
 import { ART_BACKGROUND_GAME, ART_COIN } from '../ui/ArtAssets';
 
 @Entry
 @Component
 struct GamePage {
   private engine: GameEngine | null = null;
-  /** 用一个递增计数器作为"脏标记"，触发 @State 刷新 */
-  @State tick: number = 0;
+  @State playerSnapshot: PlayerState = new PlayerState(ALL_HEROES[0]);
+  @State aiSnapshot: PlayerState = new PlayerState(ALL_HEROES[0]);
+  @State roundSnapshot: number = 1;
+  @State frozenSnapshot: boolean = false;
+  @State battleRound: number = 1;
   @State selectedBoardUid: number = -1;
   @State inBattle: boolean = false;
   @State currentBattle: BattleResult = new BattleResult();
@@ -48,10 +50,12 @@ struct GamePage {
       router.replaceUrl({ url: 'pages/MainMenuPage' });
       return;
     }
+    this.refreshSnapshots();
     this.engine.onStateChange(() => {
-      this.tick++;
+      this.refreshSnapshots();
     });
     this.engine.onBattleResolved((result, playerDamage) => {
+      this.battleRound = this.engine!.round;
       this.currentBattle = result;
       this.inBattle = true;
       if (playerDamage > 0) {
@@ -150,7 +154,7 @@ struct GamePage {
           minions: this.playerShop(),
           gold: this.playerGold(),
           handFull: this.playerHand().length >= 10,
-          frozen: this.engine?.frozen ?? false,
+          frozen: this.frozenSnapshot,
           onBuy: (idx: number) => this.buy(idx)
         })
 
@@ -169,9 +173,9 @@ struct GamePage {
             onTap: () => { this.engine!.upgradeTavern(); }
           })
           ActionButton({
-            label: this.engine?.frozen ? '已冻结' : '冻结', sub: '保留下回合', icon: 'freeze',
+            label: this.frozenSnapshot ? '已冻结' : '冻结', sub: '保留下回合', icon: 'freeze',
             isEnabled: true,
-            btnColor: this.engine?.frozen ? '#2A4A6A' : '#4A6A2A',
+            btnColor: this.frozenSnapshot ? '#2A4A6A' : '#4A6A2A',
             onTap: () => { this.engine!.toggleFreeze(); }
           })
           ActionButton({
@@ -200,7 +204,7 @@ struct GamePage {
         Column() {
           BattleReplay({
             result: this.currentBattle,
-            round: this.round(),
+            round: this.battleRound,
             onFinish: () => {
               this.inBattle = false;
             }
@@ -226,27 +230,37 @@ struct GamePage {
     .height('100%')
   }
 
-  // ---------------- 数据访问（从 engine 读取） ----------------
+  // 引擎模型不是 @Observed；每次通知发布新的、隔离的 @State 快照。
+  private snapshot(source: PlayerState): PlayerState {
+    const copy = new PlayerState(source.hero);
+    copy.health = source.health;
+    copy.gold = source.gold;
+    copy.tavernTier = source.tavernTier;
+    copy.upgradeCost = source.upgradeCost;
+    copy.refreshCost = source.refreshCost;
+    copy.skillUsed = source.skillUsed;
+    copy.board = source.board.map((m) => m.clone(m.uid));
+    copy.hand = source.hand.map((m) => m.clone(m.uid));
+    copy.shop = source.shop.map((m) => m.clone(m.uid));
+    return copy;
+  }
 
-  private round(): number { return this.engine?.round ?? 1; }
-  private playerGold(): number { return this.engine?.player.gold ?? 0; }
-  private upgradeCost(): number { return this.engine?.player.upgradeCost ?? 0; }
+  private refreshSnapshots(): void {
+    if (!this.engine) return;
+    this.playerSnapshot = this.snapshot(this.engine.player);
+    this.aiSnapshot = this.snapshot(this.engine.ai);
+    this.roundSnapshot = this.engine.round;
+    this.frozenSnapshot = this.engine.frozen;
+  }
 
-  private playerState() {
-    return this.engine?.player ?? this.emptyPlayer();
-  }
-  private aiState() {
-    return this.engine?.ai ?? this.emptyPlayer();
-  }
-  private playerBoard(): Minion[] {
-    return this.engine?.player.board ?? [];
-  }
-  private playerHand(): Minion[] {
-    return this.engine?.player.hand ?? [];
-  }
-  private playerShop(): Minion[] {
-    return this.engine?.player.shop ?? [];
-  }
+  private round(): number { return this.roundSnapshot; }
+  private playerGold(): number { return this.playerSnapshot.gold; }
+  private upgradeCost(): number { return this.playerSnapshot.upgradeCost; }
+  private playerState(): PlayerState { return this.playerSnapshot; }
+  private aiState(): PlayerState { return this.aiSnapshot; }
+  private playerBoard(): Minion[] { return this.playerSnapshot.board; }
+  private playerHand(): Minion[] { return this.playerSnapshot.hand; }
+  private playerShop(): Minion[] { return this.playerSnapshot.shop; }
 
   // ---------------- 交互处理 ----------------
 
@@ -295,20 +309,20 @@ struct GamePage {
   // ---------------- 工具 ----------------
 
   private canRefresh(): boolean {
-    return !!this.engine && this.engine.player.gold >= GameConfig.REFRESH_COST && !this.inBattle;
+    return !!this.engine && this.playerSnapshot.gold >= GameConfig.REFRESH_COST && !this.inBattle;
   }
   private canUpgrade(): boolean {
-    return !!this.engine && this.engine.player.tavernTier < 6 &&
-      this.engine.player.gold >= this.engine.player.upgradeCost && !this.inBattle;
+    return !!this.engine && this.playerSnapshot.tavernTier < 6 &&
+      this.playerSnapshot.gold >= this.playerSnapshot.upgradeCost && !this.inBattle;
   }
   private canUseSkill(): boolean {
-    return !!this.engine && !this.engine.player.skillUsed &&
-      this.engine.player.gold >= (this.engine.player.hero.skill?.cost ?? 99) && !this.inBattle;
+    return !!this.engine && !this.playerSnapshot.skillUsed &&
+      this.playerSnapshot.gold >= (this.playerSnapshot.hero.skill?.cost ?? 99) && !this.inBattle;
   }
   private skillSubText(): string {
-    const skill = this.engine?.player.hero.skill;
+    const skill = this.playerSnapshot.hero.skill;
     if (!skill) return '';
-    return this.engine!.player.skillUsed ? '已用' : `${skill.cost}🪙`;
+    return this.playerSnapshot.skillUsed ? '已用' : `${skill.cost}🪙`;
   }
 
   private showToast(msg: string): void {
