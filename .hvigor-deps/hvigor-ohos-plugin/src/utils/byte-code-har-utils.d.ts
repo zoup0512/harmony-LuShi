@@ -32,10 +32,12 @@ export interface IByteCodeHarInfo {
  * 从上文可以看到，被字节码HAR直接依赖的NPM三方包，只会收集入口，如果某个importee（dayjs/plugin/etc）对应的文件没有被入口文件import，就会引起运行时异常，增加该字段，为了补充这部分逻辑的缺失。
  * 在收集时，找到对应的文件，并加入otherCompileEntrances。
  * @param targetService
+ * @param enableV2
  */
-export declare const collectByteCodeInfoAndOtherCompileEntrances: (targetService: TargetTaskService) => {
+export declare const collectByteCodeInfoAndOtherCompileEntrances: (targetService: TargetTaskService, enableV2?: boolean) => {
     byteCodeInfo: Map<string, IByteCodeHarInfo>;
     otherCompileEntrances: Map<string, boolean>;
+    otherCompileEntrancesV2: Map<string, Map<string, boolean>>;
 };
 export declare const checkByteCodeHar: ({ logger, compileApiVersion, compatibleApiVersion, useNormalizedOHMUrl, }: {
     logger: OhosLogger;

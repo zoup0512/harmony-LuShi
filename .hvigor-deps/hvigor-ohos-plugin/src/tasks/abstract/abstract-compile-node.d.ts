@@ -46,6 +46,7 @@ export declare abstract class AbstractCompileNode extends OhosHapTask {
     private getReExportCheckMode;
     private getEnableStrictCheckOHModule;
     protected get isByteCodeHarOptimize(): boolean;
+    protected getWidgetTransitiveDeps(): boolean;
     declareInputs(): Map<string, TaskInputValue>;
     declareOutputFiles(): FileSet;
     declareInputFiles(): FileSet;

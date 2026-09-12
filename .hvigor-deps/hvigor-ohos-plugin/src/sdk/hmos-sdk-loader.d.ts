@@ -18,7 +18,9 @@ export declare class HmosSdkLoader {
      * @param components
      */
     getHmosSdkComponents(sdkVersion: ApiMeta, components: string[]): Promise<Map<string, Component>>;
-    private checkComponentExistence;
+    private checkSdkVersionMatch;
+    private checkLocalSdkExists;
+    private checkComponentDefinition;
     /**
      * 获取HarmonyOS sdk中的hmscore
      *

@@ -1,20 +1,5 @@
 {
   "app": {
-    "signingConfigs": [
-      {
-        "name": "default",
-        "type": "HarmonyOS",
-        "material": {
-          "certpath": "C:\\Users\\vyron\\.ohos\\config\\default_harmony-LuShi_t_Qcj7kChPBIFD_5BPuKX012jtx5qyC_6Yzv7N35Sak=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001B640B10B1DF2D79F3593A4402E87F50158F7DA48E78B9C644C0F4A7C6A997295634721131E53D93",
-          "profile": "C:\\Users\\vyron\\.ohos\\config\\default_harmony-LuShi_t_Qcj7kChPBIFD_5BPuKX012jtx5qyC_6Yzv7N35Sak=.p7b",
-          "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\vyron\\.ohos\\config\\default_harmony-LuShi_t_Qcj7kChPBIFD_5BPuKX012jtx5qyC_6Yzv7N35Sak=.p12",
-          "storePassword": "0000001B4FB5D13DBEB2913C17A6DAFD544D22A0E2BB4270A823296A76C425C7B6AF4140320115A5558155"
-        }
-      }
-    ],
     "products": [
       {
         "name": "default",
@@ -31,6 +16,21 @@
       },
       {
         "name": "release"
+      }
+    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\24790\\.ohos\\config\\default_harmony-LuShi_rxfQqRwycdp47quPx920v-k5YIH-YRnMWkkMXMLY6E4=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B8A9365E558BD628D31232373ADC7F3D650E444343FEEA74E5B74D1E601CBC59A982862B57AA0DD",
+          "profile": "C:\\Users\\24790\\.ohos\\config\\default_harmony-LuShi_rxfQqRwycdp47quPx920v-k5YIH-YRnMWkkMXMLY6E4=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\24790\\.ohos\\config\\default_harmony-LuShi_rxfQqRwycdp47quPx920v-k5YIH-YRnMWkkMXMLY6E4=.p12",
+          "storePassword": "0000001BE85E1EEA2A271528A3A57797827EB6AA2AA36001DC3E8487A8D870E1630B14334AEB6EF2C7648A"
+        }
       }
     ]
   },

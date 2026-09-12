@@ -701,7 +701,8 @@
           "autoLazyFilter",
           "skipOhModulesLint",
           "reExportCheckMode",
-          "expandImportPath"
+          "expandImportPath",
+          "widget"
         ]
       },
       "properties": {
@@ -924,6 +925,22 @@
             "compatible",
             "strict"
           ]
+        },
+        "widget": {
+          "description": "卡片相关配置。",
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "transitiveDeps"
+            ]
+          },
+          "properties": {
+            "transitiveDeps": {
+              "description": "是否搜集间接依赖",
+              "type": "boolean",
+              "default": false
+            }
+          }
         }
       }
     },

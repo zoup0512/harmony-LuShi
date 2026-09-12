@@ -36,6 +36,7 @@ export declare class GenerateLoaderJson extends AbstractGenerateLoaderJson {
     private readonly declarationEntry;
     private pkgContextInfos;
     private readonly byteCodeHarInfo;
+    private readonly pkgName2OtherCompileFiles;
     private byteCodeHarInfoDuplicate;
     private pkgContextInfoDuplicate;
     private otherCompileFilesDuplicate;
@@ -43,6 +44,7 @@ export declare class GenerateLoaderJson extends AbstractGenerateLoaderJson {
     private readonly ohExportsFilePaths;
     private get useNormalizedOHMUrl();
     private get isByteCodeHarOptimize();
+    private get isWidgetTransitiveDeps();
     declareInputs(): Map<string, TaskInputValue>;
     declareDynamicImportInputs(map: Map<string, TaskInputValue>): void;
     declareInputFiles(): FileSet;

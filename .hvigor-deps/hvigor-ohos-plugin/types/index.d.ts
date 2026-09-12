@@ -272,6 +272,11 @@ declare interface ArkOptions {
     skipOhModulesLint?: boolean;
     expandImportPath?: ExpandImportPath;
     autoLazyFilter?: AutoLazyFilter;
+    widget?: Widget;
+}
+
+declare type Widget = {
+    transitiveDeps?: boolean;
 }
 
 declare type ArkOptionsOpt = {

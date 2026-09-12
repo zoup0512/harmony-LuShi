@@ -37,3 +37,9 @@ yarn.lock
 Thumbs.db
 *.swp
 *.swo
+
+# .hvigor-deps 内部的 hvigor 源码自带 cache/、build/ 等同名目录，
+# 上面的忽略规则会在提交时把它们剥掉，导致克隆后 hvigor 缺文件无法运行。
+# 因此重新包含 .hvigor-deps 下的全部内容（node_modules 除外）。
+!.hvigor-deps/**
+.hvigor-deps/**/node_modules/
